@@ -1,5 +1,9 @@
 module RaggedArrays
 
-# package code goes here
+include("core.jl")
+include("indexing.jl")
+include("show.jl")
+
+export RaggedArray
 
 end # module
