@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/mbauman/RaggedArrays.jl.svg?branch=master)](https://travis-ci.org/mbauman/RaggedArrays.jl)
 
-RaggedArrays.jl is an experimental package that tries to make a valid contiguous ragged (or jagged) array behave as normally as possible.  The array "pretends" to have a size that spans the maximum extent of the ragged lengths.  Specify the ragged dimension's sizes as an array argument to the constructor:
+RaggedArrays.jl is an experimental package that tries to make a valid contiguous ragged (or jagged) array behave as normally as possible.  The array "pretends" to have a size that spans the maximum extent of the ragged lengths, but accessing beyond a ragged length is a BoundsError.  Specify the ragged dimension's sizes as an array argument to the constructor:
 
 ```jl
 julia> R = RaggedArrays.RaggedArray(Int, [3,1,2,4], 4) # Varying column lengths
