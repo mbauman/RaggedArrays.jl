@@ -157,39 +157,6 @@ ragged_sub2ind(R::RaggedArray, i::Int) = i
     end
 end
 
-# # Determine the total number of elements in the trailing dimension
-# # (I don't think this is really needed)
-@generated function ragged_trailingsize{T,N,RD,n}(A::RaggedArray{T,N,RD}, ::Type{Val{n}})
-    n > N && return 1
-    if n > RD
-        ex = :(size(A, $n))
-        for m = n+1:N
-            ex = :($ex * size(A, $m))
-        end
-    else
-        ex = :(A.ragged_offsets[end])
-        for m=n:RD-1
-            ex = :($ex * size(A, $m))
-        end
-    end
-    Expr(:block, Expr(:meta, :inline), ex)
-end
-function ragged_trailingsize{T,N,RD}(A::RaggedArray{T,N,RD}, n::Int)
-    n > N && return 1
-    if n > RD
-        s = size(A, n)
-        for m = n+1:N
-            s = s * size(A, m)
-        end
-    else
-        s = A.ragged_offsets[end]
-        for m=n:RD-1
-            s = s * size(A, m)
-        end
-    end
-    s
-end
-
 import Base: _checkbounds, trailingsize, throw_boundserror
 @inline Base.checkbounds(R::RaggedArray, i::AbstractVector{Bool}) = checkbounds_impl(R, i)
 @inline Base.checkbounds(R::RaggedArray, i::AbstractArray{Bool}) = checkbounds_impl(R, i)
