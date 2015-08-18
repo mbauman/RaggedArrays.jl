@@ -203,7 +203,7 @@ import Base: <, <=, +, -
 <(a::LinearIndex, b::LinearIndex) = a.data < b.data
 <=(a::LinearIndex, b::LinearIndex) = a.data <= b.data
 +(a::LinearIndex, b::LinearIndex) = LinearIndex(a.data + b.data)
-+(a::LinearIndex) = LinearIndex(-a.data)
+-(a::LinearIndex) = LinearIndex(-a.data)
 -(a::LinearIndex, b::LinearIndex) = LinearIndex(a.data - b.data)
 Base.convert(::Type{Int}, a::LinearIndex) = a.data
 Base.convert(::Type{LinearIndex}, x::Int) = LinearIndex(x)
