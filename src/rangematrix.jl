@@ -38,11 +38,7 @@ function Base.size(R::RaggedRangeMatrix, d)
     d > 2 && return 1
     throw(ArgumentError())
 end
-@inline function Base.size(R::RaggedRangeMatrix, dim, idxs::Tuple{Vararg{Any}})
-    dim != 1 && return (dim <= N ? R.square_size[dim] : 1)
-    maplength(R.rs[idxs...])
-end
-Base.linearindexing{R<:RaggedRangeMatrix}(::Type{R}) = Base.LinearSlow()
+@inline raggedlengths(R::RaggedRangeMatrix, idxs...) = maplength(R.rs[idxs...])
 
 # Scalar indexing
 Base.getindex(R::RaggedRangeMatrix, i::Int, j::Int) = (checkbounds(R, i, j); ragged_unsafe_getindex(R, i, j))
@@ -53,8 +49,8 @@ ragged_unsafe_getindex(R::RaggedRangeMatrix, i::Int, j::Int) = @inbounds return 
 Base.getindex(R::RaggedRangeMatrix, I::Union{Range, Colon}, J) = (checkbounds(R, I, J); ragged_unsafe_getindex(R, I, J))
 # This is intentionally not spelled Base.unsafe_getindex!
 ragged_unsafe_getindex(R::RaggedRangeMatrix, I::Range, j::Number) = @inbounds return R.rs[j][I]
-ragged_unsafe_getindex(R::RaggedRangeMatrix, ::Colon,  j::Number) = @inbounds return R.rs[j][I]
+ragged_unsafe_getindex(R::RaggedRangeMatrix, c::Colon, j::Number) = @inbounds return R.rs[j][c]
 ragged_unsafe_getindex(R::RaggedRangeMatrix, I::Range, ::Colon)   = @inbounds return RaggedRangeMatrix([R.rs[j][I] for j=1:length(R.rs)]) # TODO: use RangeMatrix!
 ragged_unsafe_getindex(R::RaggedRangeMatrix, I::Range, J)         = @inbounds return RaggedRangeMatrix([R.rs[j][I] for j in J])           # TODO: use RangeMatrix!
-ragged_unsafe_getindex(R::RaggedRangeMatrix, ::Colon,  ::Colon)   = @inbounds return RaggedRangeMatrix([R.rs[j][I] for j=1:length(R.rs)])
-ragged_unsafe_getindex(R::RaggedRangeMatrix, ::Colon,  J)         = @inbounds return RaggedRangeMatrix([R.rs[j][I] for j in J])
+ragged_unsafe_getindex(R::RaggedRangeMatrix, c::Colon, ::Colon)   = @inbounds return RaggedRangeMatrix([R.rs[j][c] for j=1:length(R.rs)])
+ragged_unsafe_getindex(R::RaggedRangeMatrix, c::Colon, J)         = @inbounds return RaggedRangeMatrix([R.rs[j][c] for j in J])

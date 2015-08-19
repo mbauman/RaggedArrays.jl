@@ -1,6 +1,4 @@
 
-abstract AbstractRaggedArray{T,N,RD,OD} <: AbstractArray{T,N}
-
 immutable RaggedArray{T,N,RD,OD} <: AbstractRaggedArray{T,N,RD,OD}
     data::Vector{T}
     square_size::NTuple{N,Int}    # maximum rectangular extents
@@ -105,23 +103,7 @@ Base.size(R::RaggedArray) = R.square_size
 # rectsize(R::RaggedArray) = R.square_size
 # rectsize{_,N}(R::RaggedArray{_,N}, d) = d <= N ? R.square_size[d] : 1
 
-# TODO: rename to raggedlengths, drop the dimension `d`, and splat the indexes?
-"""
-    size(R::RaggedArray, d, indexes::Tuple)
-
-As a special extension to size, `AbstractRaggedArray`s must allow providing
-context for looking up the ragged size in dimension `d` in the form of the
-trailing `indexes` for dimensions `d+1:end`. The indexes need not index at the
-full dimensionality of the array. If `d` is not the ragged dimension, the
-indexes are completely ignored. Furthermore, the indexes may be non-scalar, in
-which case a corresponding array of ragged lengths is returned.
-
-All `AbstractRaggedArray`s must implement this method.
-"""
-@inline function Base.size{T,N,RD}(R::RaggedArray{T,N,RD}, dim, idxs::Tuple{Vararg{Any}})
-    dim != RD && return (dim <= N ? R.square_size[dim] : 1)
-    R.ragged_lengths[idxs...]
-end
+@inline raggedlengths{T,N,RD}(R::RaggedArray{T,N,RD}, idxs...) = R.ragged_lengths[idxs...]
 
 # similar without changing dimensions -- use the same ragged sizes, too!
 Base.similar{T}(R::RaggedArray{T}) = similar(R, T)
@@ -168,42 +150,6 @@ ragged_sub2ind(R::RaggedArray, i::Int) = i
         inner = sub2ind(inner_size, $(inner_idxs...))
         inner+prod(inner_size)*(i[$RD]-1+R.ragged_offsets[$(outer_idxs...)])
     end
-end
-
-import Base: _checkbounds, trailingsize, throw_boundserror
-@inline Base.checkbounds(R::AbstractRaggedArray, i::AbstractVector{Bool}) = checkbounds_impl(R, i)
-@inline Base.checkbounds(R::AbstractRaggedArray, i::AbstractArray{Bool}) = checkbounds_impl(R, i)
-@inline Base.checkbounds(R::AbstractRaggedArray, i::Union{AbstractArray, Real, Colon}) = checkbounds_impl(R, i)
-@inline Base.checkbounds(R::AbstractRaggedArray, i::Union{AbstractArray, Real, Colon}...) = checkbounds_impl(R, i...)
-
-# Check both the ragged and rectangular bounds for a RaggedArray
-@generated function checkbounds_impl{_,AN,RD}(A::AbstractRaggedArray{_,AN,RD}, I...)
-    meta = Expr(:meta, :inline)
-    N = length(I)
-    N <= RD && return :(throw(ArgumentError("linear indexing through a ragged dimension is unsupported")))
-    Isplat = [:(I[$d]) for d=1:N]
-    error = :(throw_boundserror(A, tuple($(Isplat...))))
-    outer_idxs = Expr[:(I[$d]) for d=RD+1:N]
-    args = Expr[]
-    for dim=1:N-1
-        dim == RD && continue # Check the ragged dimension last
-        push!(args, :(_checkbounds(size(A,$dim), I[$dim]) || $error))
-    end
-    push!(args, :(_checkbounds(trailingsize(A,Val{$N}), I[$N]) || $error))
-    # Check the ragged dimension
-    if all(i->i<:Real, I[RD+1:N])
-        # With all-scalar outer indexes, just use them as a ragged length lookup
-        push!(args, :(_checkbounds(size(A, $RD, ($(outer_idxs...),)), I[$RD]) || $error))
-    else
-        # Otherwise, there may be different ragged lengths across the indexes
-        push!(args, quote
-            raglens = size(A, $RD, ($(outer_idxs...),)) # An array of lengths
-            for i in eachindex(raglens)
-                _checkbounds(raglens[i], I[$RD]) || $error
-            end
-        end)
-    end
-    Expr(:block, meta, args...)
 end
 
 # Since we pretend to be a full rectangular array but throw errors for the

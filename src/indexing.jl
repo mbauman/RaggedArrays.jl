@@ -21,7 +21,7 @@ index_shape(A::AbstractRaggedArray, I::Colon) = error("linear indexing not suppo
                 # selected ragged size(s). If the outer indices aren't all
                 # scalars, this will return an array and force the creation
                 # of a new AbstractRaggedArray for the indexed output.
-                push!(sz.args, :(size(A, $RD, ($(outer_idxs...),))))
+                push!(sz.args, :(raggedlengths(A, $(outer_idxs...))))
             else
                 push!(sz.args, d < N ? :(size(A, $d)) : :(trailingsize(A, Val{$d})))
             end
@@ -104,7 +104,7 @@ function _ragged_nloops(N::Int, RD::Int, itersym::Symbol, arraysym::Symbol, args
     ex = Expr(:escape, body)
     for dim = 1:N
         itervar = inlineanonymous(itersym, dim)
-        rng = dim == RD ? :(1:size($arraysym, $dim, $(Expr(:tuple, [symbol(itersym, :_, d) for d=RD+1:N]...)))) :
+        rng = dim == RD ? :(1:raggedlengths($arraysym, $([symbol(itersym, :_, d) for d=RD+1:N]...))) :
                           :(1:size($arraysym, $dim))
         preexpr = length(args) > 1 ? inlineanonymous(args[1], dim) : (:(nothing))
         postexpr = length(args) > 2 ? inlineanonymous(args[2], dim) : (:(nothing))
