@@ -105,17 +105,12 @@ Base.size(R::RaggedArray) = R.square_size
 
 @inline raggedlengths{T,N,RD}(R::RaggedArray{T,N,RD}, idxs...) = R.ragged_lengths[idxs...]
 
-# similar without changing dimensions -- use the same ragged sizes, too!
-Base.similar{T}(R::RaggedArray{T}) = similar(R, T)
+# We can short-circuit the RaggedArray constructor when we're not changing size
 Base.similar{T,N,RD,OD,S}(R::RaggedArray{T,N,RD,OD}, ::Type{S}) =
     RaggedArray{S,N,RD,OD}(similar(R.data, S), copy(R.square_size), copy(R.ragged_lengths), copy(R.ragged_offsets))
-# similar with a different ragged size
-Base.similar(R::RaggedArray, I::Union{Int,Array{Int},Tuple}...) = similar(R, I)
-Base.similar{T}(R::RaggedArray{T}, I::Tuple{Vararg{Union{Int, Array{Int}, Tuple}}}) = similar(R, T, I)
-Base.similar{T}(R::RaggedArray, ::Type{T}, I::Union{Int,Array{Int},Tuple}...) = similar(R, T, I)
-Base.similar{T}(R::RaggedArray, ::Type{T}, I::Tuple{Vararg{Union{Int, Array{Int}, Tuple}}}) = RaggedArray(T, I...)
-# similar with a non-ragged size becomes a regular Array
-Base.similar{T}(R::RaggedArray, ::Type{T}, I::Tuple{Vararg{Int}}) = Array(T, I...)
+
+# This is the method that other AbstractRaggedArrays should overload if they want to specialize the behavior
+Base.similar{T}(R::AbstractRaggedArray, ::Type{T}, I::Tuple{Vararg{Union{Int, Array{Int}, Tuple}}}) = RaggedArray(T, I...)
 
 # Note that it is extremely important to *not* listen to the `@inbounds` macro
 # or define Base.unsafe_getindex. Base Julia assumes that everything within

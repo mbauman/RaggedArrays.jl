@@ -27,6 +27,21 @@ All `AbstractRaggedArray`s must implement this method.
 """
 function raggedlengths end
 
+@generated function raggedsize{T,N,RD}(R::AbstractRaggedArray{T,N,RD})
+    Expr(:tuple, [:(size(R, $d)) for d=1:RD-1]..., raggedlengths(R, :), [:(size(R, $d)) for d=RD+1:N]...)
+end
+
+# similar without changing dimensions -- use the same ragged sizes, too!
+Base.similar{T}(R::AbstractRaggedArray{T}) = similar(R, T)
+Base.similar{T,N,RD,OD,S}(R::AbstractRaggedArray{T,N,RD,OD}, ::Type{S}) = similar(R, S, raggedsize(R))
+# similar with a different ragged size
+Base.similar(R::AbstractRaggedArray, I::Union{Int,Array{Int},Tuple}...) = similar(R, I)
+Base.similar{T}(R::AbstractRaggedArray{T}, I::Tuple{Vararg{Union{Int, Array{Int}, Tuple}}}) = similar(R, T, I)
+Base.similar{T}(R::AbstractRaggedArray, ::Type{T}, I::Union{Int,Array{Int},Tuple}...) = similar(R, T, I)
+# similar with a non-ragged size becomes a regular Array
+Base.similar{T}(R::AbstractRaggedArray, ::Type{T}, I::Tuple{Vararg{Int}}) = Array(T, I...)
+
+
 import Base: _checkbounds, trailingsize, throw_boundserror
 @inline Base.checkbounds(R::AbstractRaggedArray, i::AbstractVector{Bool}) = checkbounds_impl(R, i)
 @inline Base.checkbounds(R::AbstractRaggedArray, i::AbstractArray{Bool}) = checkbounds_impl(R, i)
