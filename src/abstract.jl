@@ -31,6 +31,20 @@ function raggedlengths end
     Expr(:tuple, [:(size(R, $d)) for d=1:RD-1]..., raggedlengths(R, :), [:(size(R, $d)) for d=RD+1:N]...)
 end
 
+# This is rather inefficient - subtypes should specialize this if their ragged
+# structure supports a different way of computing the total number of elements.
+@generated function Base.length{T,N,RD}(R::AbstractRaggedArray{T,N,RD})
+    inner_sz = Expr(:tuple, [:(size(R, $d)) for d=1:RD-1]...)
+    outer_sz = Expr(:tuple, [:(size(R, $d)) for d=RD+1:N]...)
+    quote
+        rag_sz = 0
+        for i=1:prod($outer_sz)
+            rag_sz += raggedlengths(R, i)
+        end
+        return rag_sz * prod($inner_size)
+    end
+end
+
 # similar without changing dimensions -- use the same ragged sizes, too!
 Base.similar{T}(R::AbstractRaggedArray{T}) = similar(R, T)
 Base.similar{T,N,RD,OD,S}(R::AbstractRaggedArray{T,N,RD,OD}, ::Type{S}) = similar(R, S, raggedsize(R))

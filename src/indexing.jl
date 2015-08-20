@@ -134,3 +134,18 @@ end
     end
 end
 
+## Eachindex
+# TODO: this can be done Cartesian-like *way* more efficiently. This is just
+# a temporary stop-gap.
+@inline cartidx(idxs...) = CartesianIndex(idxs)
+@generated function Base.eachindex{T,N,RD}(R::AbstractRaggedArray{T,N,RD})
+    quote
+        Is = Vector{CartesianIndex{$N}}(length(R))
+        idx = 0
+        @ragged_nloops $N $RD i R begin
+            idx += 1
+            Is[idx] = @ncall $N cartidx i
+        end
+        Is
+    end
+end
