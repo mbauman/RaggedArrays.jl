@@ -28,7 +28,7 @@ All `AbstractRaggedArray`s must implement this method.
 function raggedlengths end
 
 @generated function raggedsize{T,N,RD}(R::AbstractRaggedArray{T,N,RD})
-    Expr(:tuple, [:(size(R, $d)) for d=1:RD-1]..., raggedlengths(R, :), [:(size(R, $d)) for d=RD+1:N]...)
+    Expr(:tuple, [:(size(R, $d)) for d=1:RD-1]..., :(raggedlengths(R, :)), [:(size(R, $d)) for d=RD+1:N]...)
 end
 
 # This is rather inefficient - subtypes should specialize this if their ragged

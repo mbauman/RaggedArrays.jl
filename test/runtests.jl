@@ -3,6 +3,9 @@ using Base.Test
 
 # write your own tests here
 R = RaggedArray(Int, (3,2,4,1), 4)
+@test size(R) == (4,4)
+@test raggedsize(R) == ([3,2,4,1], 4)
+
 fill!(R, 0)
 @test all(R.data .== 0)
 for elt in R
@@ -72,6 +75,9 @@ end
 ##
 
 R = RaggedArray(Int, 4, [3,1,2], 3)
+@test size(R) == (4,3,3)
+@test raggedsize(R) == (4, [3,1,2], 3)
+
 [R[i] = Int(i) for i in eachindex(R)]
 
 @test R[:,:,1] == R[:,1:3,1] == reshape(1:4*3, 4, 3)
@@ -102,6 +108,9 @@ sprint(writemime, MIME"text/plain"(), RaggedArray(Float64, [1:20;20:-1:1], 20, 2
 ##
 
 R = RaggedArray(Int, [0,0,0,0,0,3],2,3)
+@test size(R) == (3,2,3)
+@test raggedsize(R) == ([0,0,0,0,0,3],2,3)
+
 [R[i] = Int(i) for i in eachindex(R)]
 
 @test R[:,:,:] == R
@@ -125,6 +134,8 @@ R[3,2,3] = 1
 #
 
 R = RaggedArray(Int, [0,0,0],3)
+@test size(R) == (0, 3)
+@test raggedsize(R) == ([0,0,0], 3)
 @test isempty(R)
 
 # 
