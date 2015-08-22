@@ -45,6 +45,36 @@ all the outer dimensions. The last dimension may not be ragged.
     end
 end
 
+"""
+    RaggedArray(A::AbstractArray{T<:AbstractArray})
+
+Create a contiguous ragged array from the passed non-contiguous nested array of
+arrays.
+"""
+function RaggedArray{NA<:AbstractArray,OD}(A::AbstractArray{NA, OD})
+    RD = ndims(NA)
+    N = RD + OD
+    isempty(A) && throw(ArgumentError("constructing a RaggedArray with an empty array is ambiguous"))
+
+    rags = Array(Int, size(A))
+    inner_sz = size(A[1])[1:end-1]
+    for (i,inner) in enumerate(A)
+        sz = size(inner)
+        sz[1:end-1] == inner_sz || throw(ArgumentError("inner dimensions must match; $i-th array has $(sz[1:end-1]), expected $inner_sz"))
+        rags[i] = sz[end]
+    end
+    R = RaggedArray(eltype(NA), inner_sz..., rags, size(A)...)
+    i = 0
+    for inner in A
+        for elt in inner
+            i+=1
+            R.data[i] = elt
+        end
+    end
+    R
+end
+
+
 "internal helper function to compute `cumsum`, but starting at 0. No need to be
 general here; just support Array{Int} and don't worry about types or eachindex."
 function cumsum0(A::Array{Int})

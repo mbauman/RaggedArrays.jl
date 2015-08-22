@@ -38,10 +38,11 @@ end
 @test_throws BoundsError R[3, :]
 @test_throws BoundsError R[4, :]
 
-@test R[:, :] == R
+@test R[:, :] == R == RaggedArray(Vector{Int}[[0,0,0],[0,0],[0,0,0,0],[0]])
 @test all(collect(R) .== 0)
 
 [R[i] = Int(i) for i in eachindex(R)]
+@test R == R == RaggedArray(Vector{Int}[[1,2,3],[4,5],[6,7,8,9],[10]])
 
 @test R[1,1] == 1
 @test R[2,1] == 2
@@ -79,6 +80,9 @@ R = RaggedArray(Int, 4, [3,1,2], 3)
 @test raggedsize(R) == (4, [3,1,2], 3)
 
 [R[i] = Int(i) for i in eachindex(R)]
+@test R == RaggedArray(Array{Int,2}[reshape(1:4*3, 4, 3),
+                                    reshape(4*3+1:4*3+4*1, 4, 1),
+                                    reshape(4*4+1:4*4+4*2, 4, 2)])
 
 @test R[:,:,1] == R[:,1:3,1] == reshape(1:4*3, 4, 3)
 @test R[:,:,2] == R[:,1:1,2] == reshape(4*3+1:4*3+4*1, 4, 1)
@@ -112,6 +116,7 @@ R = RaggedArray(Int, [0,0,0,0,0,3],2,3)
 @test raggedsize(R) == ([0,0,0,0,0,3],2,3)
 
 [R[i] = Int(i) for i in eachindex(R)]
+@test R == RaggedArray(reshape(Vector{Int}[[],[],[],[],[],[1,2,3]], 2, 3))
 
 @test R[:,:,:] == R
 for k=1:2, j=1:3, i=1:3
@@ -173,11 +178,11 @@ j = 0
 for i in eachindex(R)
     R[i] = (j+=1)
 end
-@test N == R
+@test N == R == RaggedArray(Vector{Int}[[1,2], [3,4,5], [6,7,8,9], [10]])
 @test collect(N) == collect(R) == collect(1:10)
 @test N == N[:,:]
 
 #
 N = NestedRagged(reshape(Matrix{Int}[[1 2], [3 4 5], [6 7 8 9], [10 11]], 2,2))
 @test collect(N) == collect(1:11)
-@test N == N[:,:,:,:]
+@test N == N[:,:,:,:] == RaggedArray(reshape(Matrix{Int}[[1 2], [3 4 5], [6 7 8 9], [10 11]], 2,2))
