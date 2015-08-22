@@ -143,3 +143,41 @@ R = RaggedArray(Int, [0,0,0],3)
 @test_throws ArgumentError RaggedArray(Int, [1,2,3,4,5,6], [4,5,6], 2)
 @test_throws ArgumentError RaggedArray(Int, [1,2,3,4,5,6])
 
+## Test abstract fallbacks with a read-only nested ragged array with crappy performance
+immutable NestedRagged{T,N,RD,OD} <: AbstractRaggedArray{T,N,RD,OD}
+    data::Array{Array{T, RD}, OD}
+end
+NestedRagged{T,RD,OD}(A::Array{Array{T, RD}, OD}) = NestedRagged{T,RD+OD,RD,OD}(A)
+# Just need size, raggedlengths, and getindex!
+Base.size{T,N,RD}(A::NestedRagged{T,N,RD}) = ntuple(N) do d
+    if d < RD
+        size(A.data[1], d)
+    elseif d == RD
+        maximum(map(x->size(x, d), A.data))
+    else
+        size(A.data, d-RD)
+    end
+end
+RaggedArrays.raggedlengths{T,N,RD}(A::NestedRagged{T,N,RD}, idxs::Int...) = size(A.data[idxs...], RD)
+RaggedArrays.raggedlengths{T,N,RD}(A::NestedRagged{T,N,RD}, idxs...) = map(x->size(x, RD), A.data[idxs...])
+@generated function Base.getindex{T,AN,RD}(A::NestedRagged{T,AN,RD}, i::Int...)
+    N = length(i)
+    inner_idxs = [:(i[$d]) for d=1:RD]
+    outer_idxs = [:(i[$d]) for d=RD+1:N]
+    return :(checkbounds(A, i...); A.data[$(outer_idxs...)][$(inner_idxs...)])
+end
+
+N = NestedRagged(Vector{Int}[[1,2], [3,4,5], [6,7,8,9], [10]])
+R = RaggedArray(Int, (2,3,4,1),4)
+j = 0
+for i in eachindex(R)
+    R[i] = (j+=1)
+end
+@test N == R
+@test collect(N) == collect(R) == collect(1:10)
+@test N == N[:,:]
+
+#
+N = NestedRagged(reshape(Matrix{Int}[[1 2], [3 4 5], [6 7 8 9], [10 11]], 2,2))
+@test collect(N) == collect(1:11)
+@test N == N[:,:,:,:]

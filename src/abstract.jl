@@ -41,7 +41,7 @@ end
         for i=1:prod($outer_sz)
             rag_sz += raggedlengths(R, i)
         end
-        return rag_sz * prod($inner_size)
+        return rag_sz * prod($inner_sz)
     end
 end
 

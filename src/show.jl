@@ -5,7 +5,7 @@ end
 
 import Base: print_matrix, sub_unsafe
 # This is a crazy whack-a-mole hack, but it works... at least for now...
-function Base.show_nd(io::IO, a::RaggedArray, limit, print_matrix, label_slices)
+function Base.show_nd(io::IO, a::AbstractRaggedArray, limit, print_matrix, label_slices)
     if isempty(a)
         return
     end
