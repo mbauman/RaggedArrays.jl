@@ -21,7 +21,7 @@ index_shape(A::AbstractRaggedArray, I::Colon) = error("linear indexing not suppo
                 # selected ragged size(s). If the outer indices aren't all
                 # scalars, this will return an array and force the creation
                 # of a new AbstractRaggedArray for the indexed output.
-                push!(sz.args, :(raggedlengths(A, $(outer_idxs...))))
+                push!(sz.args, :(RaggedDimension(raggedlengths(A, $(outer_idxs...)))))
             else
                 push!(sz.args, d < N ? :(size(A, $d)) : :(trailingsize(A, Val{$d})))
             end

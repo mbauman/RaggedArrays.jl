@@ -1,7 +1,7 @@
 
-immutable RaggedArray{T,N,RD,OD} <: AbstractRaggedArray{T,N,RD,OD}
+immutable RaggedArray{T,N,RD,OD,SZ} <: AbstractRaggedArray{T,N,RD,OD}
     data::Vector{T}
-    square_size::NTuple{N,Int}    # maximum rectangular extents
+    size::SZ
     ragged_lengths::Array{Int,OD} # OD = N-RD; the shape of the outer dimensions
     ragged_offsets::Array{Int,OD}
 end
@@ -30,9 +30,8 @@ all the outer dimensions. The last dimension may not be ragged.
     N == RD && return :(throw(ArgumentError("ragged dimension must not be the last dimension given")))
     I = Expr(:tuple, [:(szs[$d]) for d=1:RD-1]...)
     O = Expr(:tuple, [:(szs[$d]) for d=RD+1:N]...)
-    S = Expr(:tuple, I.args..., :(maximum(szs[$RD])), O.args...)
+    S = Expr(:tuple, I.args..., :(RaggedDimension(szs[$RD])), O.args...)
     quote
-        square_size = $S
         inner_size = $I
         outer_size = $O
         # TODO: allow broadcasting of the ragged size array?
@@ -41,7 +40,8 @@ all the outer dimensions. The last dimension may not be ragged.
         ragged_offsets = cumsum0(ragged_lengths)
         len = prod(inner_size) * (ragged_offsets[end] + ragged_lengths[end])
         data = Vector{$T}(len)
-        RaggedArray{$T,$N,$RD,$(N-RD)}(data, square_size, ragged_lengths, ragged_offsets)
+        sz = $S
+        RaggedArray{$T,$N,$RD,$(N-RD),typeof(sz)}(data, sz, ragged_lengths, ragged_offsets)
     end
 end
 
@@ -121,7 +121,7 @@ end
 
 # (Implementation of #1)
 Base.length(R::RaggedArray) = length(R.data) # == length(eachindex(R)) != prod(size(R))
-Base.size(R::RaggedArray) = R.square_size
+Base.size(R::RaggedArray) = R.size
 # (Implementation of #2)
 # Base.length(R::RaggedArray) = length(R.data)
 # Base.size(R::RaggedArray) = throw(ArgumentError("size of a ragged array is undefined"))
@@ -136,11 +136,11 @@ Base.size(R::RaggedArray) = R.square_size
 @inline raggedlengths{T,N,RD}(R::RaggedArray{T,N,RD}, idxs...) = R.ragged_lengths[idxs...]
 
 # We can short-circuit the RaggedArray constructor when we're not changing size
-Base.similar{T,N,RD,OD,S}(R::RaggedArray{T,N,RD,OD}, ::Type{S}) =
-    RaggedArray{S,N,RD,OD}(similar(R.data, S), copy(R.square_size), copy(R.ragged_lengths), copy(R.ragged_offsets))
+Base.similar{T,N,RD,OD,SZ,S}(R::RaggedArray{T,N,RD,OD,SZ}, ::Type{S}) =
+    RaggedArray{S,N,RD,OD,SZ}(similar(R.data, S), copy(R.size), copy(R.ragged_lengths), copy(R.ragged_offsets))
 
 # This is the method that other AbstractRaggedArrays should overload if they want to specialize the behavior
-Base.similar{T}(R::AbstractRaggedArray, ::Type{T}, I::Tuple{Vararg{Union{Int, Array{Int}, Tuple}}}) = RaggedArray(T, I...)
+Base.similar{T}(R::AbstractRaggedArray, ::Type{T}, I::Tuple{Vararg{Union{Int, RaggedDimension}}}) = RaggedArray(T, I...)
 
 # Note that it is extremely important to *not* listen to the `@inbounds` macro
 # or define Base.unsafe_getindex. Base Julia assumes that everything within
