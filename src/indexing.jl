@@ -143,9 +143,9 @@ immutable RaggedFast <: RaggedIndexing; end
 immutable RaggedSlow <: RaggedIndexing; end
 
 Base.linearindexing(::RaggedFast, ::RaggedFast) = RaggedFast()
-Base.linearindexing(::RaggedIndexing, ::RaggedIndexing) = LinearSlow() # TODO: implement multi-arg RaggedSlow eachindex
-Base.linearindexing(::RaggedIndexing, ::Base.LinearIndexing) = LinearSlow()
-Base.linearindexing(::Base.LinearIndexing, ::RaggedIndexing) = LinearSlow()
+Base.linearindexing(::RaggedIndexing, ::RaggedIndexing) = Base.LinearSlow() # TODO: implement multi-arg RaggedSlow eachindex
+Base.linearindexing(::RaggedIndexing, ::Base.LinearIndexing) = Base.LinearSlow()
+Base.linearindexing(::Base.LinearIndexing, ::RaggedIndexing) = Base.LinearSlow()
 
 Base.linearindexing{R<:AbstractRaggedArray}(::Type{R}) = RaggedSlow()
 
