@@ -153,7 +153,7 @@ immutable NestedRagged{T,N,RD,OD} <: AbstractRaggedArray{T,N,RD,OD}
     data::Array{Array{T, RD}, OD}
 end
 NestedRagged{T,RD,OD}(A::Array{Array{T, RD}, OD}) = NestedRagged{T,RD+OD,RD,OD}(A)
-# Just need size, raggedlengths, and getindex!
+# Just need size and getindex!
 Base.size{T,N,RD}(A::NestedRagged{T,N,RD}) = ntuple(N) do d
     if d < RD
         size(A.data[1], d)
@@ -163,8 +163,6 @@ Base.size{T,N,RD}(A::NestedRagged{T,N,RD}) = ntuple(N) do d
         size(A.data, d-RD)
     end
 end
-RaggedArrays.raggedlengths{T,N,RD}(A::NestedRagged{T,N,RD}, idxs::Int...) = size(A.data[idxs...], RD)
-RaggedArrays.raggedlengths{T,N,RD}(A::NestedRagged{T,N,RD}, idxs...) = map(x->size(x, RD), A.data[idxs...])
 @generated function Base.getindex{T,AN,RD}(A::NestedRagged{T,AN,RD}, i::Int...)
     N = length(i)
     inner_idxs = [:(i[$d]) for d=1:RD]

@@ -135,10 +135,24 @@ end
 end
 
 ## Eachindex
+# Doc: "If the arrays have different sizes and/or dimensionalities, eachindex
+# returns an iterable that spans the largest range along each dimension."
+
+abstract RaggedIndexing <: Base.LinearIndexing
+immutable RaggedFast <: RaggedIndexing; end
+immutable RaggedSlow <: RaggedIndexing; end
+
+Base.linearindexing(::RaggedFast, ::RaggedFast) = RaggedFast()
+Base.linearindexing(::RaggedIndexing, ::RaggedIndexing) = LinearSlow() # TODO: implement multi-arg RaggedSlow eachindex
+Base.linearindexing(::RaggedIndexing, ::Base.LinearIndexing) = LinearSlow()
+Base.linearindexing(::Base.LinearIndexing, ::RaggedIndexing) = LinearSlow()
+
+Base.linearindexing{R<:AbstractRaggedArray}(::Type{R}) = RaggedSlow()
+
 # TODO: this can be done Cartesian-like *way* more efficiently. This is just
 # a temporary stop-gap.
 @inline cartidx(idxs...) = CartesianIndex(idxs)
-@generated function Base.eachindex{T,N,RD}(R::AbstractRaggedArray{T,N,RD})
+@generated function Base.eachindex{T,N,RD}(::RaggedSlow, R::AbstractRaggedArray{T,N,RD})
     quote
         Is = Vector{CartesianIndex{$N}}(length(R))
         idx = 0
@@ -148,4 +162,30 @@ end
         end
         Is
     end
+end
+
+# For fast linear indexing, we create a custom integer type that can act as a
+# flag for callers who opt-in to ragged behaviors. Linear indexing with regular
+# Ints is ambiguous.
+immutable LinearIndex <: Integer
+    data::Int
+end
+import Base: <, <=, +, -
+<(a::LinearIndex, b::LinearIndex) = a.data < b.data
+<=(a::LinearIndex, b::LinearIndex) = a.data <= b.data
++(a::LinearIndex, b::LinearIndex) = LinearIndex(a.data + b.data)
+-(a::LinearIndex) = LinearIndex(-a.data)
+-(a::LinearIndex, b::LinearIndex) = LinearIndex(a.data - b.data)
+Base.convert(::Type{Int}, a::LinearIndex) = a.data
+Base.convert(::Type{LinearIndex}, x::Int) = LinearIndex(x)
+Base.promote_rule(::Type{LinearIndex}, ::Type{Int}) = LinearIndex
+
+Base.eachindex(::RaggedFast, R::AbstractArray) = LinearIndex(1):LinearIndex(length(R))
+function Base.eachindex(::RaggedFast, R::AbstractArray, Rs::AbstractArray...)
+    # ensure all sizes are equal; see JuliaLan/julia#13310
+    sz = size(R)
+    for r in Rs
+        sz == size(r) || throw(DimensionMismatch())
+    end
+    LinearIndex(1):LinearIndex(length(R))
 end

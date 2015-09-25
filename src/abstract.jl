@@ -22,27 +22,27 @@ slice lengths to behave as the maximum size in a limited number of cases. In
 this fashion, it's able to behave as the maximum rectangular extent in some
 Base AbstractArray methods.
 """
-immutable RaggedDimension{T<:Union{Tuple,Array}}
+immutable RaggedDimension{T<:Union{Tuple,AbstractArray}}
     szs::T # An iterable container of lengths for each ragged slice
 end
-# This is a little sketchy, but a RaggedDimension(::Int) is an Int
-RaggedDimension(i::Int) = i
+# This is a little sketchy, but a RaggedDimension(::Real) is not ragged
+RaggedDimension(i::Real) = convert(Int, i)
 
 import Base: ==
 =={T}(a::RaggedDimension{T}, b::RaggedDimension{T}) = a.szs == b.szs
-# TODO: Hash tuples and arrays the same
+=={T<:Union{Tuple,AbstractArray}}(a::RaggedDimension{T}, b::T) = a.szs == b
+=={T<:Union{Tuple,AbstractArray}}(b::RaggedDimension{T}, a::T) = b.szs == a
+==(a::RaggedDimension, b::RaggedDimension) = (for (x,y) in zip(a, b); x == y || return false; end; return true)
+==(a::Union{Tuple,AbstractArray}, b::RaggedDimension) = (for (x,y) in zip(a, b); x == y || return false; end; return true)
+==(a::RaggedDimension, b::Union{Tuple,AbstractArray}) = (for (x,y) in zip(a, b); x == y || return false; end; return true)
+# TODO: Hash tuples and all abstract arrays the same: by their contents
 Base.hash(a::RaggedDimension, h::UInt) = hash(a.szs, hash(UInt(0xe4daeb7692ca0a52), h))
 
-# For general equality against other types, just act like an iterable container
-=={T<:Union{Tuple,Array}}(a::RaggedDimension{T}, b::T) = a.szs == b
-=={T<:Union{Tuple,Array}}(b::RaggedDimension{T}, a::T) = b.szs == a
-
-==(a::RaggedDimension, b::Union{Tuple,Array,RaggedDimension}) = (for (x,y) in zip(a, b); x == y || return false; end; return true)
-==(a::Union{Tuple,Array}, b::RaggedDimension) = (for (x,y) in zip(a, b); x == y || return false; end; return true)
 
 Base.start(d::RaggedDimension) = start(d.szs)
 Base.next(d::RaggedDimension, s) = next(d.szs, s)
 Base.done(d::RaggedDimension, s) = done(d.szs, s)
+Base.getindex(d::RaggedDimension, idxs...) = RaggedDimension(getindex(d.szs, idxs...))
 
 Base.maximum(a::RaggedDimension) = maximum(a.szs)
 
@@ -54,22 +54,48 @@ Base.colon(start::RaggedDimension, step::Real, stop::Real) = colon(maximum(start
 Base.isless(a::Int, b::RaggedDimension) = isless(a, maximum(b))
 Base.isless(a::RaggedDimension, b::Int) = isless(maximum(a), b)
 
-#TODO: I really don't like this...
+#TODO: I really don't like this... but it's needed for SubArrays
 import Base: *
 *(i::Int, d::RaggedDimension) = i*maximum(d)
 
 """
     raggedlengths(R, indexes...)
 
-As a special extension to size, `AbstractRaggedArray`s must allow looking up
+As a special extension to size, all `AbstractRaggedArray`s allow looking up
 the ragged lengths along the ragged dimension by providing context in the form
 of the trailing `indexes` for the outer dimensions. The indexes need not index
 at the full dimensionality of the array. The indexes may be non-scalar, in
-which case a corresponding array of ragged lengths is returned.
-
-All `AbstractRaggedArray`s must implement this method.
+which case a RaggedDimension containing the lengths of each slice is returned.
 """
-function raggedlengths end
+@inline raggedlengths{T,N,RD}(R::AbstractRaggedArray{T,N,RD}, idxs...) = _raggedlengths(R, size(R, RD), idxs...)
+@generated function _raggedlengths{T<:AbstractArray,_,N,RD}(R::AbstractRaggedArray{_,N,RD}, d::RaggedDimension{T}, idxs...)
+    # Use plain-old indexing to look up the ragged lengths
+    outer_sz = Expr(:tuple, [:(size(R, $d)) for d=RD+1:N]...)
+    quote
+        sz = $outer_sz
+        if size(d.szs) == sz
+            return d[idxs...]
+        else
+            return RaggedDimension(reshape(d.szs, sz)[idxs...])
+        end
+    end
+end
+@generated function _raggedlengths{T<:AbstractArray,_,N,RD}(R::AbstractRaggedArray{_,N,RD}, d::RaggedDimension{T}, idxs...)
+    # Use plain-old indexing to look up the ragged lengths
+    outer_sz = Expr(:tuple, [:(size(R, $d)) for d=RD+1:N]...)
+    length(idxs) == 1 && return :(d[idxs[1]])
+    quote
+        sz = $outer_sz
+        if size(d.szs) == sz
+            return d[idxs...]
+        else
+            return RaggedDimension(reshape(d.szs, sz)[idxs...])
+        end
+    end
+end
+
+
+
 
 @generated function rectsize{T,N,RD}(R::AbstractRaggedArray{T,N,RD})
     Expr(:tuple, [:(size(R, $d)) for d=1:RD-1]..., :(maximum(size(R, $RD))), [:(size(R, $d)) for d=RD+1:N]...)
@@ -123,8 +149,8 @@ import Base: trailingsize, throw_boundserror
         # Otherwise, there may be different ragged lengths across the indexes
         push!(args, quote
             raglens = raggedlengths(A, $(outer_idxs...)) # An array of lengths
-            for i in eachindex(raglens)
-                checkbounds(Bool, raglens[i], I[$RD]) || $error
+            for r in raglens
+                checkbounds(Bool, r, I[$RD]) || $error
             end
         end)
     end
