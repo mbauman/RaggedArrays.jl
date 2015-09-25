@@ -1,7 +1,7 @@
 
-immutable RaggedArray{T,N,RD,OD} <: AbstractRaggedArray{T,N,RD,OD}
+immutable RaggedArray{T,N,RD,OD,SZ} <: AbstractRaggedArray{T,N,RD,OD}
     data::Vector{T}
-    square_size::NTuple{N,Int}    # maximum rectangular extents
+    size::SZ
     ragged_lengths::Array{Int,OD} # OD = N-RD; the shape of the outer dimensions
     ragged_offsets::Array{Int,OD}
 end
@@ -30,9 +30,8 @@ all the outer dimensions. The last dimension may not be ragged.
     N == RD && return :(throw(ArgumentError("ragged dimension must not be the last dimension given")))
     I = Expr(:tuple, [:(szs[$d]) for d=1:RD-1]...)
     O = Expr(:tuple, [:(szs[$d]) for d=RD+1:N]...)
-    S = Expr(:tuple, I.args..., :(maximum(szs[$RD])), O.args...)
+    S = Expr(:tuple, I.args..., :(RaggedDimension(szs[$RD])), O.args...)
     quote
-        square_size = $S
         inner_size = $I
         outer_size = $O
         # TODO: allow broadcasting of the ragged size array?
@@ -41,7 +40,8 @@ all the outer dimensions. The last dimension may not be ragged.
         ragged_offsets = cumsum0(ragged_lengths)
         len = prod(inner_size) * (ragged_offsets[end] + ragged_lengths[end])
         data = Vector{$T}(len)
-        RaggedArray{$T,$N,$RD,$(N-RD)}(data, square_size, ragged_lengths, ragged_offsets)
+        sz = $S
+        RaggedArray{$T,$N,$RD,$(N-RD),typeof(sz)}(data, sz, ragged_lengths, ragged_offsets)
     end
 end
 
@@ -105,42 +105,32 @@ end
 #       easily in places where (1) does just fine. If we do this, I'm not sure
 #       it's worth trying to be an AbstractArray without a fully valid size.
 #    3. Or maybe some middle ground:
-#         * They could behave like a NullableArray, returning Nullable{T}() for
+#        a. They could behave like a NullableArray, returning Nullable{T}() for
 #           out of bounds accesses, but that seems awkward and heavy-handed.
-#         * Another idea was to have size return a special RaggedDimension type
+#        b. Another idea was to have size return a special RaggedDimension type
 #           that stored all the ragged lengths but behaved like an integer with
-#           the maximum length, perhaps with very little arithmetic implemented.
-#           This may be type-unstable, and it doesn't seem to gain us much.
+#           the maximum length in a limited number of contexts. This makes
+#           size(R, d) type-unstable, but it allows for safer size comparisons
+#           and helps ensure that base methods behave correctly.
 #    4. Probably the best solution would be to *not* be an AbstractArray, and
 #       just return an array of ragged lengths for the ragged dimension in size.
 #       Type stability for size(R, d) is problematic, but may be mitigated
 #       with Val{d}.
-# For now, it's nice to be able to piggy-back on AbstractArray with (1). So few
+# For now, it's nice to be able to piggy-back on AbstractArray with (3b). So few
 # AbstractArray methods work with (2) and (4) that it's probably not worth being
 # a subtype of AbstractArray with those options.
 
-# (Implementation of #1)
 Base.length(R::RaggedArray) = length(R.data) # == length(eachindex(R)) != prod(size(R))
-Base.size(R::RaggedArray) = R.square_size
-# (Implementation of #2)
-# Base.length(R::RaggedArray) = length(R.data)
-# Base.size(R::RaggedArray) = throw(ArgumentError("size of a ragged array is undefined"))
-# @inline function Base.size{T,N,RD}(R::RaggedArray{T,N,RD}, d)
-#     d == RD && throw(ArgumentError("size of the ragged dimension ($d) is undefined"))
-#     d <= N ? R.square_size[d] : 1
-# end
-# "`rectsize(R)` is the maximum extent of the ragged array R"
-# rectsize(R::RaggedArray) = R.square_size
-# rectsize{_,N}(R::RaggedArray{_,N}, d) = d <= N ? R.square_size[d] : 1
+Base.size(R::RaggedArray) = R.size
 
 @inline raggedlengths{T,N,RD}(R::RaggedArray{T,N,RD}, idxs...) = R.ragged_lengths[idxs...]
 
 # We can short-circuit the RaggedArray constructor when we're not changing size
-Base.similar{T,N,RD,OD,S}(R::RaggedArray{T,N,RD,OD}, ::Type{S}) =
-    RaggedArray{S,N,RD,OD}(similar(R.data, S), copy(R.square_size), copy(R.ragged_lengths), copy(R.ragged_offsets))
+Base.similar{T,N,RD,OD,SZ,S}(R::RaggedArray{T,N,RD,OD,SZ}, ::Type{S}) =
+    RaggedArray{S,N,RD,OD,SZ}(similar(R.data, S), copy(R.size), copy(R.ragged_lengths), copy(R.ragged_offsets))
 
 # This is the method that other AbstractRaggedArrays should overload if they want to specialize the behavior
-Base.similar{T}(R::AbstractRaggedArray, ::Type{T}, I::Tuple{Vararg{Union{Int, Array{Int}, Tuple}}}) = RaggedArray(T, I...)
+Base.similar{T}(R::AbstractRaggedArray, ::Type{T}, I::Tuple{Vararg{Union{Int, RaggedDimension}}}) = RaggedArray(T, I...)
 
 # Note that it is extremely important to *not* listen to the `@inbounds` macro
 # or define Base.unsafe_getindex. Base Julia assumes that everything within
@@ -177,22 +167,7 @@ ragged_sub2ind(R::RaggedArray, i::Int) = i
     end
 end
 
-# Since we pretend to be a full rectangular array but throw errors for the
-# ragged dimensions, we can't just use a linear index through the array...
-# but we really are a LinearFast array, so just use a custom type as a flag
-immutable LinearIndex <: Integer
-    data::Int
-end
-import Base: <, <=, +, -
-<(a::LinearIndex, b::LinearIndex) = a.data < b.data
-<=(a::LinearIndex, b::LinearIndex) = a.data <= b.data
-+(a::LinearIndex, b::LinearIndex) = LinearIndex(a.data + b.data)
--(a::LinearIndex) = LinearIndex(-a.data)
--(a::LinearIndex, b::LinearIndex) = LinearIndex(a.data - b.data)
-Base.convert(::Type{Int}, a::LinearIndex) = a.data
-Base.convert(::Type{LinearIndex}, x::Int) = LinearIndex(x)
-Base.promote_rule(::Type{LinearIndex}, ::Type{Int}) = LinearIndex
-
-Base.eachindex(A::RaggedArray) = LinearIndex(1):LinearIndex(length(A.data))
+# RaggedFast indexing with using the special LinearIndex type
+Base.linearindexing{R<:RaggedArray}(::Type{R}) = RaggedFast()
 Base.getindex(R::RaggedArray, I::LinearIndex) = R.data[I.data]
 Base.setindex!(R::RaggedArray, v, I::LinearIndex) = (R.data[I.data] = v)

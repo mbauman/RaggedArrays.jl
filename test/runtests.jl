@@ -3,8 +3,8 @@ using Base.Test
 
 # write your own tests here
 R = RaggedArray(Int, (3,2,4,1), 4)
-@test size(R) == (4,4)
-@test raggedsize(R) == ([3,2,4,1], 4)
+@test rectsize(R) == (4,4)
+@test size(R) == ([3,2,4,1], 4)
 
 fill!(R, 0)
 @test all(R.data .== 0)
@@ -76,8 +76,8 @@ end
 ##
 
 R = RaggedArray(Int, 4, [3,1,2], 3)
-@test size(R) == (4,3,3)
-@test raggedsize(R) == (4, [3,1,2], 3)
+@test rectsize(R) == (4,3,3)
+@test size(R) == (4, [3,1,2], 3)
 
 [R[i] = Int(i) for i in eachindex(R)]
 @test R == RaggedArray(Array{Int,2}[reshape(1:4*3, 4, 3),
@@ -112,8 +112,8 @@ sprint(writemime, MIME"text/plain"(), RaggedArray(Float64, [1:20;20:-1:1], 20, 2
 ##
 
 R = RaggedArray(Int, [0,0,0,0,0,3],2,3)
-@test size(R) == (3,2,3)
-@test raggedsize(R) == ([0,0,0,0,0,3],2,3)
+@test rectsize(R) == (3,2,3)
+@test size(R) == ([0,0,0,0,0,3],2,3)
 
 [R[i] = Int(i) for i in eachindex(R)]
 @test R == RaggedArray(reshape(Vector{Int}[[],[],[],[],[],[1,2,3]], 2, 3))
@@ -139,11 +139,11 @@ R[3,2,3] = 1
 #
 
 R = RaggedArray(Int, [0,0,0],3)
-@test size(R) == (0, 3)
-@test raggedsize(R) == ([0,0,0], 3)
+@test rectsize(R) == (0, 3)
+@test size(R) == ([0,0,0], 3)
 @test isempty(R)
 
-# 
+#
 
 @test_throws ArgumentError RaggedArray(Int, [1,2,3,4,5,6], [4,5,6], 2)
 @test_throws ArgumentError RaggedArray(Int, [1,2,3,4,5,6])
@@ -153,18 +153,16 @@ immutable NestedRagged{T,N,RD,OD} <: AbstractRaggedArray{T,N,RD,OD}
     data::Array{Array{T, RD}, OD}
 end
 NestedRagged{T,RD,OD}(A::Array{Array{T, RD}, OD}) = NestedRagged{T,RD+OD,RD,OD}(A)
-# Just need size, raggedlengths, and getindex!
+# Just need size and getindex!
 Base.size{T,N,RD}(A::NestedRagged{T,N,RD}) = ntuple(N) do d
     if d < RD
         size(A.data[1], d)
     elseif d == RD
-        maximum(map(x->size(x, d), A.data))
+        RaggedArrays.RaggedDimension(map(x->size(x, d), A.data))
     else
         size(A.data, d-RD)
     end
 end
-RaggedArrays.raggedlengths{T,N,RD}(A::NestedRagged{T,N,RD}, idxs::Int...) = size(A.data[idxs...], RD)
-RaggedArrays.raggedlengths{T,N,RD}(A::NestedRagged{T,N,RD}, idxs...) = map(x->size(x, RD), A.data[idxs...])
 @generated function Base.getindex{T,AN,RD}(A::NestedRagged{T,AN,RD}, i::Int...)
     N = length(i)
     inner_idxs = [:(i[$d]) for d=1:RD]
