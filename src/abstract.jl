@@ -59,11 +59,6 @@ Base.isless(a::RaggedDimension, b::Int) = isless(maximum(a), b)
 import Base: *
 *(i::Int, d::RaggedDimension) = i*maximum(d)
 
-# TODO: I also don't like this... but it's a stand-in until I get
-# multi-arg RaggedSlow eachindex up and running
-Base.call{N}(::Type{CartesianIndex{N}}, index::Union{Integer,RaggedDimension}...) = CartesianIndex{N}(index)
-Base.call{N}(::Type{CartesianIndex{N}}, index::NTuple{N,Union{Integer,RaggedDimension}}) = CartesianIndex{N}(map(maximum, index))
-
 """
     raggedlengths(R, indexes...)
 

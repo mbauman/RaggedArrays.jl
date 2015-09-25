@@ -5,6 +5,6 @@ include("indexing.jl")
 include("array.jl")
 include("show.jl")
 
-export RaggedArray, AbstractRaggedArray, raggedlengths, rectsize
+export RaggedArray, AbstractRaggedArray, RaggedDimension, raggedlengths, rectsize
 
 end # module
