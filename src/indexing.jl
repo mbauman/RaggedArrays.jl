@@ -143,7 +143,7 @@ immutable RaggedFast <: RaggedIndexing; end
 immutable RaggedSlow <: RaggedIndexing; end
 
 Base.linearindexing(::RaggedFast, ::RaggedFast) = RaggedFast()
-Base.linearindexing(::RaggedIndexing, ::RaggedIndexing) = Base.LinearSlow() # TODO: implement multi-arg RaggedSlow eachindex
+Base.linearindexing(::RaggedIndexing, ::RaggedIndexing) = RaggedSlow()
 Base.linearindexing(::RaggedIndexing, ::Base.LinearIndexing) = Base.LinearSlow()
 Base.linearindexing(::Base.LinearIndexing, ::RaggedIndexing) = Base.LinearSlow()
 
@@ -163,6 +163,15 @@ Base.linearindexing{R<:AbstractRaggedArray}(::Type{R}) = RaggedSlow()
         Is
     end
 end
+# TODO: extend to maximum of each dimension?  For now, just ensure sizes are equal and punt.
+function Base.eachindex(::RaggedSlow, R::AbstractArray, Rs::AbstractArray...)
+    sz = size(R)
+    for r in Rs
+        sz == size(r) || throw(DimensionMismatch())
+    end
+    eachindex(RaggedSlow(), R)
+end
+Base.eachindex(::RaggedSlow, A::AbstractArray) = eachindex(Base.LinearSlow(), A)
 
 # For fast linear indexing, we create a custom integer type that can act as a
 # flag for callers who opt-in to ragged behaviors. Linear indexing with regular

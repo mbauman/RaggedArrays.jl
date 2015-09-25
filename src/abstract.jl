@@ -51,12 +51,18 @@ Base.colon(start::Real, step::Real, stop::RaggedDimension) = colon(start, step, 
 Base.colon(start::RaggedDimension, stop::Real) = colon(maximum(start), stop)
 Base.colon(start::RaggedDimension, step::Real, stop::Real) = colon(maximum(start), step, stop)
 
+Base.isless(a::RaggedDimension, b::RaggedDimension) = isless(maximum(a), maximum(b))
 Base.isless(a::Int, b::RaggedDimension) = isless(a, maximum(b))
 Base.isless(a::RaggedDimension, b::Int) = isless(maximum(a), b)
 
 #TODO: I really don't like this... but it's needed for SubArrays
 import Base: *
 *(i::Int, d::RaggedDimension) = i*maximum(d)
+
+# TODO: I also don't like this... but it's a stand-in until I get
+# multi-arg RaggedSlow eachindex up and running
+Base.call{N}(::Type{CartesianIndex{N}}, index::Union{Integer,RaggedDimension}...) = CartesianIndex{N}(index)
+Base.call{N}(::Type{CartesianIndex{N}}, index::NTuple{N,Union{Integer,RaggedDimension}}) = CartesianIndex{N}(map(maximum, index))
 
 """
     raggedlengths(R, indexes...)
