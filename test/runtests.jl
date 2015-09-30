@@ -154,7 +154,7 @@ immutable NestedRagged{T,N,RD,OD} <: AbstractRaggedArray{T,N,RD,OD}
 end
 NestedRagged{T,RD,OD}(A::Array{Array{T, RD}, OD}) = NestedRagged{T,RD+OD,RD,OD}(A)
 # Just need size and getindex!
-Base.size{T,N,RD}(A::NestedRagged{T,N,RD}) = ntuple(N) do d
+@inline Base.size{T,N,RD}(A::NestedRagged{T,N,RD}) = ntuple(N) do d
     if d < RD
         size(A.data[1], d)
     elseif d == RD
@@ -184,3 +184,8 @@ end
 N = NestedRagged(reshape(Matrix{Int}[[1 2], [3 4 5], [6 7 8 9], [10 11]], 2,2))
 @test collect(N) == collect(1:11)
 @test N == N[:,:,:,:] == RaggedArray(reshape(Matrix{Int}[[1 2], [3 4 5], [6 7 8 9], [10 11]], 2,2))
+
+S = N[1,:,1:2]
+@test NestedRagged(Matrix{Int}[[1 2],[3 4 5]]) == S
+@test S[1,:,1] == [1 2]
+@test S[1,:,2] == [3 4 5]
