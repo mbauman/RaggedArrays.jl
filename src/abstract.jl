@@ -172,16 +172,45 @@ the normal `sub2ind` would compute the linear indexes in terms of the overall
 (maximal) extents of the array, this removes all the invalid indices and assumes
 that the given indices are within both the rectangular and ragged bounds.
 """
-@generated function ragged_sub2ind{_,__,RD}(R::AbstractRaggedArray{_,__,RD}, i::Int...)
+@generated function ragged_sub2ind{_,__,RD}(R::AbstractRaggedArray{_,__,RD}, i::Integer...)
     N = length(i)
     N == 1 && return :(i)
     inner_idxs = [:(i[$d]) for d=1:RD-1]
-    inner_size = Expr(:tuple, [:(size(R, $d)) for d=1:RD-1]...)
+    inner_size = Expr(:tuple, [:(size(R, Val{$d})) for d=1:RD-1]...)
     outer_idxs = [:(i[$d]) for d=RD+1:N]
     quote
-        ragged_offsets = cumsum0(raggedlengths(R, :))
+        ragged_offsets = cumsum0(size(R, Val{$RD}))
         inner_size = $inner_size
         inner = sub2ind(inner_size, $(inner_idxs...))
         inner+prod(inner_size)*(i[$RD]-1+ragged_offsets[$(outer_idxs...)])
+    end
+end
+
+"""
+    ragged_ind2sub(R::AbstractRaggedArray, i)
+
+Given a *ragged* linear index, return a set of indexing subscripts. Whereas the
+normal `ind2sub` assumes the linear indexes span the entire rectangular extents
+of the array, this skips all the invalid indices. Assumes `i` is in-bounds.
+
+Note that it does not return a tuple at the full-dimensionality of the ragged
+array, but rather a tuple with the minimum dimensionality necessary to prevent
+linear indexing through the ragged dimension.
+"""
+@generated function ragged_ind2sub{_,N,RD}(R::AbstractRaggedArray{_,N,RD}, I::Integer)
+    N == 1 && return :((i,))
+    inner_size = Expr(:tuple, [:(size(R, Val{$d})) for d=1:RD-1]...)
+    # outer_size = Expr(:tuple, [:(size(R, Val{$d})) for d=RD+1:N]...)
+    quote
+        # Determine the number of complete inner chunks the index steps over:
+        i = Int(I) # convert LinearIndex to Int
+        inner_size = $inner_size
+        inner_count, offset = divrem(i-1, prod(inner_size))
+        inner_count += 1
+        inner_idxs = ind2sub(inner_size, offset+1)
+        # Now figure out the outer indexes, which select the correct inner chunk
+        ragged_offsets = cumsum0(size(R, Val{$RD}))
+        outer_idx = searchsortedfirst(vec(ragged_offsets), inner_count)-1
+        (inner_idxs..., inner_count - ragged_offsets[outer_idx], outer_idx)
     end
 end

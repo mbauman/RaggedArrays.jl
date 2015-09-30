@@ -187,6 +187,8 @@ end
 N = NestedRagged(reshape(Matrix{Int}[[1 2], [3 4 5], [6 7 8 9], [10 11]], 2,2))
 @test collect(N) == collect(1:11)
 @test N == N[:,:,:,:] == RaggedArray(reshape(Matrix{Int}[[1 2], [3 4 5], [6 7 8 9], [10 11]], 2,2))
+@test RaggedArray(reshape(Matrix{Int}[[1 2], [3 4 5], [6 7 8 9], [10 11]], 2,2)) == N[:,:,:,:]
+@test N[:,:,:,:] == N
 
 S = N[1,:,1:2]
 @test NestedRagged(Matrix{Int}[[1 2],[3 4 5]]) == S

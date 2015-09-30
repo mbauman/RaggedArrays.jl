@@ -85,7 +85,7 @@ convert_ints() = ()
     # Expand any cartesian indices first
     any(i->i<:CartesianIndex, I) && return :($meta; getindex(A, $(cartindex_exprs(I, :I)...)))
     # If we're explicitly using linear indexing, use ragged_ind2sub
-    length(I) == 1 && I[1] <: LinearIndex && return :($meta; getindex(A, ragged_ind2sub(A, I)...))
+    length(I) == 1 && I[1] <: LinearIndex && return :($meta; getindex(A, ragged_ind2sub(A, I[1])...))
     # Then ensure we're not linear indexing
     N <= RD && return :(throw(ArgumentError("linear indexing through a ragged dimension is unsupported")))
     # If all indices are Int, then the AbstractRaggedArray subtype didn't define indexing
