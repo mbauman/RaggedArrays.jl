@@ -151,3 +151,37 @@ import Base: trailingsize, throw_boundserror
     end
     Expr(:block, meta, args...)
 end
+
+# internal helper function to compute `cumsum`, but starting at 0. No need to be
+# general here; just support Array{Int} and don't worry about types or eachindex.
+cumsum0(D::RaggedDimension) = cumsum0(D.szs)
+function cumsum0(A::AbstractArray{Int})
+    C = similar(A)
+    C[1] = 0
+    for i=2:length(A)
+        C[i] = C[i-1] + A[i-1]
+    end
+    C
+end
+
+"""
+    ragged_sub2ind(R::AbstractRaggedArray, i::Int...)
+
+Determine the *ragged* linear index from a set of indexing subscripts. Whereas
+the normal `sub2ind` would compute the linear indexes in terms of the overall
+(maximal) extents of the array, this removes all the invalid indices and assumes
+that the given indices are within both the rectangular and ragged bounds.
+"""
+@generated function ragged_sub2ind{_,__,RD}(R::AbstractRaggedArray{_,__,RD}, i::Int...)
+    N = length(i)
+    N == 1 && return :(i)
+    inner_idxs = [:(i[$d]) for d=1:RD-1]
+    inner_size = Expr(:tuple, [:(size(R, $d)) for d=1:RD-1]...)
+    outer_idxs = [:(i[$d]) for d=RD+1:N]
+    quote
+        ragged_offsets = cumsum0(raggedlengths(R, :))
+        inner_size = $inner_size
+        inner = sub2ind(inner_size, $(inner_idxs...))
+        inner+prod(inner_size)*(i[$RD]-1+ragged_offsets[$(outer_idxs...)])
+    end
+end

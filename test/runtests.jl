@@ -179,6 +179,9 @@ end
 @test N == R == RaggedArray(Vector{Int}[[1,2], [3,4,5], [6,7,8,9], [10]])
 @test collect(N) == collect(R) == collect(1:10)
 @test N == N[:,:]
+@test RaggedArrays.ragged_sub2ind(N, 2, 2) == 4 == N[2, 2]
+@test RaggedArrays.ragged_sub2ind(N, 2, 3) == 7 == N[2, 3]
+@test RaggedArrays.ragged_sub2ind(N, 3, 3) == 8 == N[3, 3]
 
 #
 N = NestedRagged(reshape(Matrix{Int}[[1 2], [3 4 5], [6 7 8 9], [10 11]], 2,2))
@@ -189,3 +192,5 @@ S = N[1,:,1:2]
 @test NestedRagged(Matrix{Int}[[1 2],[3 4 5]]) == S
 @test S[1,:,1] == [1 2]
 @test S[1,:,2] == [3 4 5]
+
+@test RaggedArrays.ragged_sub2ind(N, 1, 2, 2) == 4 == N[1, 2, 2]

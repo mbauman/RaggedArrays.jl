@@ -74,17 +74,6 @@ function RaggedArray{NA<:AbstractArray,OD}(A::AbstractArray{NA, OD})
     R
 end
 
-
-"internal helper function to compute `cumsum`, but starting at 0. No need to be
-general here; just support Array{Int} and don't worry about types or eachindex."
-function cumsum0(A::Array{Int})
-    C = similar(A)
-    C[1] = 0
-    for i=2:length(A)
-        C[i] = C[i-1] + A[i-1]
-    end
-    C
-end
 # Size is the toughest part in determining how to best define a ragged array.
 # There are several options here:
 #    1. Define size as the maximum "outermost" extents. Accessing a ragged
@@ -146,14 +135,7 @@ function Base.setindex!(R::RaggedArray, v, i::Int...)
     R
 end
 
-"""
-    ragged_sub2ind(R::RaggedArray, i::Int...)
-
-Determine the *ragged* linear index from a set of indexing subscripts. Whereas
-the normal `sub2ind` would compute the linear indexes in terms of the overall
-(maximal) extents of the array, this removes all the invalid indices and assumes
-that the given indices are within both the rectangular and ragged bounds.
-"""
+# We can specialize ragged_sub2ind using the ragged offsets
 ragged_sub2ind(R::RaggedArray, i::Int) = i
 @generated function ragged_sub2ind{_,__,RD}(R::RaggedArray{_,__,RD}, i::Int...)
     N = length(i)
