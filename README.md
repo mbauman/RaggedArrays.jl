@@ -18,7 +18,7 @@ julia> [R[i]=i for i=eachindex(R)]; R
    2     #undef    6      8
    3     #undef  #undef   9
  #undef  #undef  #undef  10
- 
+
 julia> R = RaggedArray(Int, 3, [3,1,2,4], 4); # Varying row lengths
        [R[i]=i for i=eachindex(R)];
        R
@@ -42,13 +42,13 @@ julia> R = RaggedArray(Int, 3, [3,1,2,4], 4); # Varying row lengths
  19  22  25  28
  20  23  26  29
  21  24  27  30
- 
+
 julia> R[1:3, 1:3, 1] # Indexing a non-ragged subsection returns an Array
 3x3 Array{Int64,2}:
  1  4  7
  2  5  8
  3  6  9
- 
+
 julia> R[2, :, 2:4] # Indexing with a : in the ragged dimension returns a RaggedArray
 1x??x3 RaggedArrays.RaggedArray{Int64,3,2,1}:
 [:, :, 1] =
@@ -59,8 +59,34 @@ julia> R[2, :, 2:4] # Indexing with a : in the ragged dimension returns a Ragged
 
 [:, :, 3] =
  20  23  26  29
- 
+
 julia> R[2:3, :, 3] # But only if it spans more than one of the outer dimensions
 2x2 Array{Int64,2}:
  14  17
  15  18
+```
+
+There is also a specialized RaggedRangeMatrix type that allows collections of
+ranges to behave like a ragged matrix. It depends upon
+[RangeArrays.jl](https://github.com/mbauman/RangeArrays.jl) in order to return a
+rectangular RangeMatrix when possible:
+
+```jl
+julia> RR = RaggedRangeMatrix(1:3,3:6,7:12,-2:1)
+??x4 RaggedArrays.RaggedRangeMatrix{Int64,Array{UnitRange{Int64},1}}:
+   1       3      7   -2
+   2       4      8   -1
+   3       5      9    0
+ #undef    6     10    1
+ #undef  #undef  11  #undef
+ #undef  #undef  12  #undef
+
+julia> RR[1:3,2:4]
+3x3 RangeArrays.RangeMatrix{Int64,Array{UnitRange{Int64},1}}:
+ 3  7  -2
+ 4  8  -1
+ 5  9   0
+
+julia> RR[:, 3]
+7:12
+```
