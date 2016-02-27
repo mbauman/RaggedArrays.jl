@@ -177,20 +177,7 @@ Base.linearindexing(::Base.LinearIndexing, ::RaggedIndexing) = Base.LinearSlow()
 
 Base.linearindexing{R<:AbstractRaggedArray}(::Type{R}) = RaggedSlow()
 
-# TODO: this can be done Cartesian-like *way* more efficiently. This is just
-# a temporary stop-gap.
-@inline cartidx(idxs...) = CartesianIndex(idxs)
-@generated function Base.eachindex{T,N,RD}(::RaggedSlow, R::AbstractRaggedArray{T,N,RD})
-    quote
-        Is = Vector{CartesianIndex{$N}}(length(R))
-        idx = 0
-        @ragged_nloops $N $RD i R begin
-            idx += 1
-            Is[idx] = @ncall $N cartidx i
-        end
-        Is
-    end
-end
+Base.eachindex{T,N,RD}(::RaggedSlow, R::AbstractRaggedArray{T,N,RD}) = RaggedCartesianRange(size(R))
 # TODO: extend to maximum of each dimension?  For now, just ensure sizes are equal and punt.
 function Base.eachindex(::RaggedSlow, R::AbstractArray, Rs::AbstractArray...)
     sz = size(R)
@@ -200,3 +187,99 @@ function Base.eachindex(::RaggedSlow, R::AbstractArray, Rs::AbstractArray...)
     eachindex(RaggedSlow(), R)
 end
 Base.eachindex(::RaggedSlow, A::AbstractArray) = eachindex(Base.LinearSlow(), A)
+
+
+## Cartesian iteration and eachindex
+immutable RaggedCartesianRange{N,RD,R}
+    start::NTuple{N,Int}
+    stop::NTuple{N,Int}
+    rags::R # Break out the ragged lengths to ensure type-stability in stop[i]
+end
+@generated function RaggedCartesianRange{N}(stop::NTuple{N})
+    start = Expr(:tuple)
+    start.args = ones(Int,N)
+    :(RaggedCartesianRange($start, stop))
+end
+@generated function RaggedCartesianRange{N}(start::NTuple{N,Int}, stop::NTuple{N})
+    RD = 0
+    for i = 1:N
+        stop.parameters[i] <: Number && continue
+        if RD == 0
+            RD = i
+        else
+            return :(throw(ArgumentError("more than one ragged dimension given in stop")))
+        end
+    end
+    RD == 0 && return :(throw(ArgumentError("no ragged dimension given in stop; use a normal CartesianRange instead")))
+    N == RD && return :(throw(ArgumentError("ragged dimension must not be the last dimension given")))
+    intstop = Expr(:tuple)
+    intstop.args = Any[d==RD ? :(typemax(Int)) : :(stop[$d]) for d=1:N]
+    quote
+        rags = stop[$RD]
+        RaggedCartesianRange{$N,$RD,typeof(rags)}(start, $intstop, rags)
+    end
+end
+
+@generated function Base.start{N,RD}(iter::RaggedCartesianRange{N,RD})
+    outer_starts = Any[:(iter.start[$d]) for d=RD+1:N]
+    outer_stops = Expr(:tuple)
+    outer_stops.args = Any[:(iter.stop[$d]) for d=RD+1:N]
+
+    extest = Expr(:||)
+    extest.args = Any[:(start[$d] > iter.stop[$d]) for d = 1:N]
+    extest.args[RD] = :(slice > length(iter.rags) || start[$RD] > iter.rags[slice])
+    # If any start > stop, jump to stop + 1 in the last dimension
+    exstop = Expr(:tuple)
+    exstop.args = Any[d < N ? :(iter.start[$d]) : :(iter.stop[$N]+1) for d = 1:N]
+    quote
+        slice = sub2ind($outer_stops, $(outer_starts...))
+        start = iter.start
+        # increment slice and state to first nonzero ragged dimension
+        while slice < length(iter.rags) && iter.rags[slice] == 0
+            (start, (slice, start)) = next(iter, (slice, start))
+        end
+        (slice, $extest ? $exstop : start)
+    end
+end
+
+import Base.Cartesian: inlineanonymous, @nexprs
+macro ragged_nif(N, RD, condition, operation, ragged_condition, ragged_operation)
+    # Handle the final "else"
+    ex = esc(inlineanonymous(operation, N))
+    # Make the nested if statements
+    for i = N-1:-1:1
+        if i == RD
+            ex = Expr(:if, esc(inlineanonymous(ragged_condition,i)), esc(inlineanonymous(ragged_operation,i)), ex)
+        else
+            ex = Expr(:if, esc(inlineanonymous(condition,i)), esc(inlineanonymous(operation,i)), ex)
+        end
+    end
+    ex
+end
+
+@generated function Base.next{N,RD}(iter::RaggedCartesianRange{N,RD}, state)
+    meta = Expr(:meta, :inline)
+    quote
+        $meta
+        slice, index = state
+        @ragged_nif($N, $RD,
+            d->(index[d] < iter.stop[d]),
+                d->(@nexprs($N, k->(ind_k = ifelse(k>=d, index[k] + (k==d), iter.start[k]))); slice = slice + (d>$RD)),
+            d->(index[d] < iter.rags[slice]), # TODO: what to do about the bounds check here?
+                d->(@nexprs($N, k->(ind_k = ifelse(k>=d, index[k] + (k==d), iter.start[k])))))
+        newindex = @ncall $N CartesianIndex{$N} ind
+        if slice <= length(iter.rags) && iter.rags[slice] == 0
+            # Skip past zero-length ragged arrays by moving the newindex ahead
+            CartesianIndex{$N}(index), next(iter, (slice, newindex))[2]
+        else
+            CartesianIndex{$N}(index), (slice, newindex)
+        end
+    end
+end
+function Base.done{N}(iter::RaggedCartesianRange{N}, state)
+    slice, index = state
+    index[N] > iter.stop[N]
+end
+
+# Add this as an option for the CartesianRange Tuple constructor
+Base.CartesianRange(stop::Tuple{Vararg{Union{Int,RaggedDimension}}}) = RaggedCartesianRange(stop)

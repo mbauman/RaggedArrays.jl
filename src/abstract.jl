@@ -43,7 +43,7 @@ Base.start(d::RaggedDimension) = start(d.szs)
 Base.next(d::RaggedDimension, s) = next(d.szs, s)
 Base.done(d::RaggedDimension, s) = done(d.szs, s)
 Base.getindex(d::RaggedDimension, idxs...) = RaggedDimension(getindex(d.szs, idxs...))
-
+Base.length(d::RaggedDimension) = length(d.szs)
 Base.maximum(a::RaggedDimension) = maximum(a.szs)
 
 Base.colon(start::Real, stop::RaggedDimension) = colon(start, maximum(stop))
