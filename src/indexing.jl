@@ -281,5 +281,10 @@ function Base.done{N}(iter::RaggedCartesianRange{N}, state)
     index[N] > iter.stop[N]
 end
 
+@generated function Base.length{N,RD}(iter::RaggedCartesianRange{N,RD})
+    inner_sz = [:(iter.stop[$i]-iter.start[$i]+1) for i=1:RD-1]
+    :(sum(iter.rags) * prod(($(inner_sz...),)))
+end
+
 # Add this as an option for the CartesianRange Tuple constructor
 Base.CartesianRange(stop::Tuple{Vararg{Union{Int,RaggedDimension}}}) = RaggedCartesianRange(stop)

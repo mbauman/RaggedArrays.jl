@@ -206,14 +206,21 @@ S = N[1,:,1:2]
 using RangeArrays
 R = RaggedRangeMatrix(UnitRange{Int}[1:11, 12:18, 19:31, 32:40])
 
-# @test collect(R) == collect(1:40)
+@test collect(R) == collect(1:40)
 @test R[1,1] == 1
 
-# j = 0
-# for i in eachindex(R)
-#     j+=1
-#     @test R[i] == j
-# end
+j = 0
+for i in eachindex(R)
+    j+=1
+    @test R[i] == j
+end
+
+# This is a RaggedSlow array, but it can still index (slowly) with explicit linear indexes
+j = 0
+for i in RaggedArrays.LinearIndex(1):RaggedArrays.LinearIndex(length(R))
+    j += 1
+    @test R[i] == j
+end
 
 @test_throws BoundsError R[1, 0]
 @test_throws BoundsError R[1, 12]
