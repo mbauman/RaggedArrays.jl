@@ -43,6 +43,7 @@ end
 
 [R[i] = Int(i) for i in eachindex(R)]
 @test R == R == RaggedArray(Vector{Int}[[1,2,3],[4,5],[6,7,8,9],[10]])
+@test [R[i] for i in eachindex(R)] == [R[i] for i in collect(CartesianRange(size(R)))] == collect(R)
 
 @test R[1,1] == 1
 @test R[2,1] == 2
@@ -80,6 +81,8 @@ R = RaggedArray(Int, 4, [3,1,2], 3)
 @test size(R) == (4, [3,1,2], 3)
 
 [R[i] = Int(i) for i in eachindex(R)]
+@test [R[i] for i in eachindex(R)] == [R[i] for i in collect(CartesianRange(size(R)))] == collect(R)
+
 @test R == RaggedArray(Array{Int,2}[reshape(1:4*3, 4, 3),
                                     reshape(4*3+1:4*3+4*1, 4, 1),
                                     reshape(4*4+1:4*4+4*2, 4, 2)])
@@ -116,6 +119,7 @@ R = RaggedArray(Int, [0,0,0,0,0,3],2,3)
 @test size(R) == ([0,0,0,0,0,3],2,3)
 
 [R[i] = Int(i) for i in eachindex(R)]
+@test [R[i] for i in eachindex(R)] == [R[i] for i in collect(CartesianRange(size(R)))] == collect(R)
 @test R == RaggedArray(reshape(Vector{Int}[[],[],[],[],[],[1,2,3]], 2, 3))
 
 @test R[:,:,:] == R
@@ -202,14 +206,21 @@ S = N[1,:,1:2]
 using RangeArrays
 R = RaggedRangeMatrix(UnitRange{Int}[1:11, 12:18, 19:31, 32:40])
 
-# @test collect(R) == collect(1:40)
+@test collect(R) == collect(1:40)
 @test R[1,1] == 1
 
-# j = 0
-# for i in eachindex(R)
-#     j+=1
-#     @test R[i] == j
-# end
+j = 0
+for i in eachindex(R)
+    j+=1
+    @test R[i] == j
+end
+
+# This is a RaggedSlow array, but it can still index (slowly) with explicit linear indexes
+j = 0
+for i in RaggedArrays.LinearIndex(1):RaggedArrays.LinearIndex(length(R))
+    j += 1
+    @test R[i] == j
+end
 
 @test_throws BoundsError R[1, 0]
 @test_throws BoundsError R[1, 12]
@@ -230,3 +241,12 @@ R = RaggedRangeMatrix(UnitRange{Int}[1:11, 12:18, 19:31, 32:40])
 @test R[2:4, 1:2] == RangeMatrix(2:4, 13:15)
 
 @test size(R, 3) == 1
+
+# Test CartesianRange with zero-length dimensions
+@test collect(CartesianRange((RaggedDimension([1,1,0]),3))) == [CartesianIndex((1,1)), CartesianIndex((1,2))]
+@test collect(CartesianRange((RaggedDimension([1,0,1]),3))) == [CartesianIndex((1,1)), CartesianIndex((1,3))]
+@test collect(CartesianRange((RaggedDimension([0,1,1]),3))) == [CartesianIndex((1,2)), CartesianIndex((1,3))]
+@test collect(CartesianRange((RaggedDimension([0,0,1]),3))) == [CartesianIndex((1,3))]
+@test collect(CartesianRange((RaggedDimension([0,1,0]),3))) == [CartesianIndex((1,2))]
+@test collect(CartesianRange((RaggedDimension([1,0,0]),3))) == [CartesianIndex((1,1))]
+@test collect(CartesianRange((RaggedDimension([0,0,0]),3))) == []
