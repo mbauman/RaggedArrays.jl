@@ -31,12 +31,17 @@ RaggedDimension(i::Real) = convert(Int, i)
 import Base: ==
 =={T}(a::RaggedDimension{T}, b::RaggedDimension{T}) = a.szs == b.szs
 =={T<:Union{Tuple,AbstractArray}}(a::RaggedDimension{T}, b::T) = a.szs == b
-=={T<:Union{Tuple,AbstractArray}}(b::RaggedDimension{T}, a::T) = b.szs == a
+=={T<:Union{Tuple,AbstractArray}}(a::T, b::RaggedDimension{T}) = b.szs == a
 ==(a::RaggedDimension, b::RaggedDimension) = (for (x,y) in zip(a, b); x == y || return false; end; return true)
 ==(a::Union{Tuple,AbstractArray}, b::RaggedDimension) = (for (x,y) in zip(a, b); x == y || return false; end; return true)
 ==(a::RaggedDimension, b::Union{Tuple,AbstractArray}) = (for (x,y) in zip(a, b); x == y || return false; end; return true)
-# TODO: Hash tuples and all abstract arrays the same: by their contents
-Base.hash(a::RaggedDimension, h::UInt) = hash(a.szs, hash(UInt(0xe4daeb7692ca0a52), h))
+function Base.hash(a::RaggedDimension, h::UInt)
+    h = hash(UInt(0xe4daeb7692ca0a52), h)
+    for sz in a.szs
+        h = hash(sz, h)
+    end
+    h
+end
 
 
 Base.start(d::RaggedDimension) = start(d.szs)
@@ -62,10 +67,6 @@ Base.isless(a::RaggedDimension, b::Int) = isless(maximum(a), b)
     RD == D && return :(size(R, D)::RaggedDimension)
     return :(size(R, D)::Int)
 end
-
-#TODO: I really don't like this... but it's needed for SubArrays
-import Base: *
-*(i::Int, d::RaggedDimension) = i*maximum(d)
 
 """
     raggedlengths(R, indexes...)

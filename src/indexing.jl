@@ -4,40 +4,17 @@
 to_index(I::AbstractArray{Bool}) = find(I)
 to_index(I::AbstractArray) = I
 to_index(i) = i
+import Base: index_shape, index_shape_dim, index_lengths, index_lengths_dim
 # shape of array to create for getindex() with indexes I, dropping trailing scalars
-index_shape(A::AbstractRaggedArray, I::AbstractArray) = error("linear indexing not supported")
-index_shape(A::AbstractRaggedArray, I::AbstractArray{Bool}) = error("linear indexing not supported")
-index_shape(A::AbstractRaggedArray, I::Colon) = error("linear indexing not supported")
-@generated function index_shape{_,__,RD}(A::AbstractRaggedArray{_,__,RD}, I...)
-    N = length(I)
-    sz = Expr(:tuple)
-    outer_idxs = [:(I[$d]) for d=RD+1:N]
-    for d=1:N
-        if !any(i->i<:Union{AbstractArray,Colon}, I[d:end])
-            break
-        elseif I[d] <: Colon
-            if d == RD
-                # If there's a Colon over the ragged dimension, return the
-                # selected ragged size(s). If the outer indices aren't all
-                # scalars, this will return an array and force the creation
-                # of a new AbstractRaggedArray for the indexed output.
-                push!(sz.args, :(RaggedDimension(raggedlengths(A, $(outer_idxs...)))))
-            else
-                push!(sz.args, d < N ? :(size(A, $d)) : :(trailingsize(A, Val{$d})))
-            end
-        elseif I[d] <: AbstractArray{Bool}
-            push!(sz.args, :(sum(I[$d])))
-        elseif I[d] <: AbstractVector
-            push!(sz.args, :(length(I[$d])))
-        else
-            push!(sz.args, 1)
-        end
-    end
-    quote
-        $(Expr(:meta, :inline))
-        $sz
-    end
-end
+index_shape_dim{T,N,RD}(A::AbstractRaggedArray{T,N,RD}, dim, ::Colon) =
+    dim == RD ? throw(ArgumentError("linear indexing through a ragged dimension is unsupported")) : trailingsize(A, dim)
+index_shape_dim{T,N,RD}(A::AbstractRaggedArray{T,N,RD}, dim, ::Colon, i, I...) =
+    (dim == RD ? RaggedDimension(raggedlengths(A, i, I...)) : size(A, dim), index_shape_dim(A, dim+1, i, I...)...)
+
+index_lengths_dim{T,N,RD}(A::AbstractRaggedArray{T,N,RD}, dim, ::Colon) =
+    dim == RD ? throw(ArgumentError("linear indexing through a ragged dimension is unsupported")) : trailingsize(A, dim)
+index_lengths_dim{T,N,RD}(A::AbstractRaggedArray{T,N,RD}, dim, ::Colon, i, I...) =
+    (dim == RD ? RaggedDimension(raggedlengths(A, i, I...)) : size(A, dim), index_lengths_dim(A, dim+1, i, I...)...)
 
 abstract RaggedIndexing <: Base.LinearIndexing
 immutable RaggedFast <: RaggedIndexing; end
@@ -76,6 +53,7 @@ indexref(::Colon, i::Int) = i
 @inline indexref(A::AbstractArray, i::Int) = unsafe_getindex(A, i)
 convert_ints() = ()
 @inline convert_ints(x, xs...) = (convert(Int, x), convert_ints(xs...)...)
+@noinline throw_checksize_error(A, shp) = throw(ArgumentError("output array is the wrong size; expected $shp, got $(size(A))"))
 
 # Just use one big generated method to do all the fallback dispatch in one place.
 @generated function Base.getindex{T,AN,RD}(A::AbstractRaggedArray{T,AN,RD}, I...)
@@ -97,8 +75,9 @@ convert_ints() = ()
     quote
         checkbounds(A, $(Isplat...))
         @nexprs $N d->(I_d = to_index(I[d]))
-        dest = similar(A, @ncall $N index_shape A I)
-        @ncall $N checksize dest I # TODO: stricter checksize for ragged arrays?
+        shp = @ncall $N index_shape A I
+        dest = similar(A, shp)
+        size(dest) == shp || throw_checksize_error(A, shp)
         @ncall $N getindex! dest A I
     end
 end
@@ -114,7 +93,8 @@ end
     quote
         D = eachindex(dest)
         Ds = start(D)
-        @nloops $N i dest d->(j_d = indexref(I[d], i_d)) begin
+        idxlens = index_lengths(src, I...)
+        @nloops $N i d->(1:idxlens[d]) d->(j_d = indexref(I[d], i_d)) begin
             d, Ds = next(D, Ds)
             v = @ncall $N ragged_unsafe_getindex src j
             Base.unsafe_setindex!(dest, v, d)
@@ -124,11 +104,11 @@ end
 end
 
 # Adapted from Base.Cartesian's @nloops: ragged iteration!
-macro ragged_nloops(N, itersym, rangeexpr, args...)
-    _ragged_nloops(N, itersym, rangeexpr, args...)
+macro ragged_nloops(N, RD, itersym, rangeexpr, args...)
+    _ragged_nloops(N, RD, itersym, rangeexpr, args...)
 end
 import Base.Cartesian: inlineanonymous
-function _ragged_nloops(N::Int, RD::Int, itersym::Symbol, arraysym::Symbol, args::Expr...)
+function _ragged_nloops(N::Int, RD::Int, itersym::Symbol, rangeexpr, args::Expr...)
     if !(1 <= length(args) <= 3)
         throw(ArgumentError("number of arguments must be 1 ≤ length(args) ≤ 3, got $nargs"))
     end
@@ -136,8 +116,13 @@ function _ragged_nloops(N::Int, RD::Int, itersym::Symbol, arraysym::Symbol, args
     ex = Expr(:escape, body)
     for dim = 1:N
         itervar = inlineanonymous(itersym, dim)
-        rng = dim == RD ? :(1:raggedlengths($arraysym, $([symbol(itersym, :_, d) for d=RD+1:N]...))) :
-                          :(1:size($arraysym, $dim))
+        if isa(rangeexpr, Symbol)
+            rng = dim == RD ? :(1:raggedlengths($arraysym, $([symbol(itersym, :_, d) for d=RD+1:N]...))) :
+                              :(1:size($arraysym, $dim))
+        else
+            rng = dim == RD ? :(1:$(inlineanonymous(rangeexpr, dim))[$([symbol(itersym, :_, d) for d=RD+1:N]...)]) :
+                              :(1:$(inlineanonymous(rangeexpr, dim)))
+        end
         preexpr = length(args) > 1 ? inlineanonymous(args[1], dim) : (:(nothing))
         postexpr = length(args) > 2 ? inlineanonymous(args[2], dim) : (:(nothing))
         ex = quote
@@ -152,12 +137,13 @@ function _ragged_nloops(N::Int, RD::Int, itersym::Symbol, arraysym::Symbol, args
 end
 
 # Assigning output to a ragged array
-@generated function getindex!{_,__,RD}(dest::AbstractRaggedArray{_,__,RD}, src::AbstractRaggedArray, I...)
+@generated function getindex!{_,__,RD}(dest::AbstractRaggedArray, src::AbstractRaggedArray{_,__,RD}, I...)
     N = length(I)
     quote
         D = eachindex(dest)
         Ds = start(D)
-        @ragged_nloops $N $RD i dest d->(j_d = indexref(I[d], i_d)) begin
+        idxlens = index_lengths(src, I...)
+        @ragged_nloops $N $RD i d->(idxlens[d]) d->(j_d = indexref(I[d], i_d)) begin
             d, Ds = next(D, Ds)
             v = @ncall $N ragged_unsafe_getindex src j
             setindex!(dest, v, d) # TODO: this can become unsafe once checksize is stricter

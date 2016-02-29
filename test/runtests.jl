@@ -67,7 +67,11 @@ end
 @test R[:, 3] == [6,7,8,9]
 @test R[:, 4] == [10,]
 
-@test R[1, :] == [1 4 6 10]
+if VERSION >= v"0.5.0-dev+1145" # Drop scalar dimensions
+    @test R[1, :] == [1,4,6,10]
+else
+    @test R[1, :] == [1 4 6 10]
+end
 @test_throws BoundsError R[2, :]
 @test_throws BoundsError R[3, :]
 @test_throws BoundsError R[4, :]
@@ -178,7 +182,8 @@ N = NestedRagged(Vector{Int}[[1,2], [3,4,5], [6,7,8,9], [10]])
 R = RaggedArray(Int, (2,3,4,1),4)
 j = 0
 for i in eachindex(R)
-    R[i] = (j+=1)
+    j+=1
+    R[i] = j
 end
 @test N == R == RaggedArray(Vector{Int}[[1,2], [3,4,5], [6,7,8,9], [10]])
 @test collect(N) == collect(R) == collect(1:10)
@@ -194,10 +199,10 @@ N = NestedRagged(reshape(Matrix{Int}[[1 2], [3 4 5], [6 7 8 9], [10 11]], 2,2))
 @test RaggedArray(reshape(Matrix{Int}[[1 2], [3 4 5], [6 7 8 9], [10 11]], 2,2)) == N[:,:,:,:]
 @test N[:,:,:,:] == N
 
-S = N[1,:,1:2]
+S = N[1:1,:,1:2]
 @test NestedRagged(Matrix{Int}[[1 2],[3 4 5]]) == S
-@test S[1,:,1] == [1 2]
-@test S[1,:,2] == [3 4 5]
+@test S[1:1,:,1] == [1 2]
+@test S[1:1,:,2] == [3 4 5]
 
 @test RaggedArrays.ragged_sub2ind(N, 1, 2, 2) == 4 == N[1, 2, 2]
 
@@ -250,3 +255,7 @@ end
 @test collect(CartesianRange((RaggedDimension([0,1,0]),3))) == [CartesianIndex((1,2))]
 @test collect(CartesianRange((RaggedDimension([1,0,0]),3))) == [CartesianIndex((1,1))]
 @test collect(CartesianRange((RaggedDimension([0,0,0]),3))) == []
+
+# Ensure RaggedDimensions hash and equal the same, regardless of their underlying storage
+@test RaggedDimension((1,2,3)) == RaggedDimension([1 2 3]) == RaggedDimension([1, 2, 3])
+@test hash(RaggedDimension((1,2,3))) == hash(RaggedDimension([1 2 3])) == hash(RaggedDimension([1, 2, 3]))
